@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -14,14 +13,13 @@ import (
 // Continuously read from websocket until error is returned.
 func loopreader(conn *websocket.Conn) {
 	for {
-		_, _, e := conn.ReadMessage()
+		_, r, e := conn.ReadMessage()
 		if e != nil {
 			log.Println(e.Error())
 			return
 		}
 
-		// Ignore returned message, for now.
-		//fmt.Printf("Response: %s\n", r)
+		fmt.Printf("Response: %s\n", r)
 	}
 }
 
@@ -42,7 +40,7 @@ func connectToTV() (conn *websocket.Conn, e error) {
 	return
 }
 
-func messenger(ch <-chan string) {
+func messenger(ch <-chan []byte) {
 	var (
 		conn *websocket.Conn
 		e    error
@@ -69,25 +67,8 @@ func messenger(ch <-chan string) {
 			go loopreader(conn)
 		}
 
-		payload := payload{
-			Method: "ms.remote.control",
-			Params: params{
-				Cmd:          "Click",
-				DataOfCmd:    command,
-				Option:       "false",
-				TypeOfRemote: "SendRemoteKey",
-			},
-		}
-
-		js, e := json.Marshal(payload)
-		if e != nil {
-			log.Println(e.Error())
-			conn = nil
-			continue
-		}
-
 		conn.SetWriteDeadline(time.Now().Add(time.Millisecond * 500))
-		e = conn.WriteMessage(websocket.TextMessage, js)
+		e = conn.WriteMessage(websocket.TextMessage, command)
 		if e != nil {
 			log.Println(e.Error())
 			conn = nil
