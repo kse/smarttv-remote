@@ -22,7 +22,7 @@ var (
 	tvsConfig televisions
 
 	mouseStep  = 20
-	mouseScale = 3
+	mouseScale = 4
 )
 
 type params struct {
@@ -174,7 +174,15 @@ func initSDL() int {
 	}
 	defer window.Destroy()
 
+	renderer, err := sdl.CreateRenderer(window, -1, sdl.RENDERER_ACCELERATED)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create renderer: %s\n", err)
+		return 2
+	}
+	defer renderer.Destroy()
+
 	sdl.SetRelativeMouseMode(true)
+	generateParsedKeymap()
 
 	running = true
 	for running {
@@ -190,21 +198,45 @@ func initSDL() int {
 			case *sdl.MouseButtonEvent:
 				fmt.Printf("[%d ms] MouseButton\ttype:%d\tid:%d\tx:%d\ty:%d\tbutton:%d\tstate:%d\n",
 					t.Timestamp, t.Type, t.Which, t.X, t.Y, t.Button, t.State)
+				fmt.Println(t.Button, sdl.BUTTON_LEFT)
+				if t.State == 1 {
+					continue
+				}
+				if t.Button == sdl.BUTTON_LEFT {
+					ch <- []byte(`{"method":"ms.remote.control","params":{"Cmd":"LeftClick","TypeOfRemote":"ProcessMouseDevice"}}`)
+				}
 				/*
-					case *sdl.MouseWheelEvent:
-						fmt.Printf("[%d ms] MouseWheel\ttype:%d\tid:%d\tx:%d\ty:%d\n",
-							t.Timestamp, t.Type, t.Which, t.X, t.Y)
+					}
+						case *sdl.MouseWheelEvent:
+							fmt.Printf("[%d ms] MouseWheel\ttype:%d\tid:%d\tx:%d\ty:%d\n",
+								t.Timestamp, t.Type, t.Which, t.X, t.Y)
 				*/
 			case *sdl.KeyboardEvent:
 				fmt.Printf("[%d ms] Keyboard\ttype:%d\tsym:%c\tmodifiers:%d\tstate:%d\trepeat:%d\n",
 					t.Timestamp, t.Type, t.Keysym.Sym, t.Keysym.Mod, t.State, t.Repeat)
 
-				cmd, ok := defaultKeymap[int32(t.Keysym.Sym)]
-
-				if !ok {
-					fmt.Println(t.Keysym.Sym)
+				if t.State == 1 {
 					continue
 				}
+
+				var (
+					cmd string
+					ok  bool
+				)
+
+				keylist, ok := sdlKeymap[t.Keysym.Sym]
+				if !ok {
+					continue
+				}
+
+				for _, key := range keylist {
+					fmt.Println(key.Mod, t.Keysym.Mod)
+					if key.Mod&t.Keysym.Mod != 0 || key.Mod == t.Keysym.Mod {
+						cmd = key.Target
+						break
+					}
+				}
+
 				if strings.HasPrefix(cmd, "KEY_") {
 					b := buildKeyPayloadString(cmd)
 					ch <- b
